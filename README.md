@@ -6,7 +6,7 @@ Servicio web (FastAPI) que recibe los datos de un sismo y predice si corresponde
 > 🔗 **URL pública:** _(completar solo si se hace el despliegue opcional)_
 > ⚠️ Proyecto académico. No reemplaza la información oficial del SHOA ni de SENAPRED.
 
-**Curso:** Cloud Computing — Diploma en Data Science, UAI · **Equipo:** _Nombre 1, Nombre 2, Nombre 3_
+**Curso:** Cloud Computing — Diploma en Data Science, UAI · **Equipo:** _Héctor Cifuentes, Pablo Parra, Matías Sagarra y Roberto Silva_
 
 ---
 
@@ -187,28 +187,28 @@ pytest -v
 Salida:
 
 ```
-============================================================================================ test session starts =============================================================================================
+============================= test session starts =============================
 platform win32 -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0 -- B:\MAGISTER DATA SCIENCE\CLOUD COMPUTING\PROYECTO\api-tsunami-chile\.venv\Scripts\python.exe
 cachedir: .pytest_cache
 rootdir: B:\MAGISTER DATA SCIENCE\CLOUD COMPUTING\PROYECTO\api-tsunami-chile
 configfile: pytest.ini
 testpaths: tests
 plugins: anyio-4.15.1
-collected 10 items                                                                                                                                                                                            
+collecting ... collected 10 items
 
-tests/test_api.py::test_health_ok PASSED                                                                                                                                                                [ 10%]
-tests/test_api.py::test_model_info PASSED                                                                                                                                                               [ 20%]
-tests/test_api.py::test_predict_exitoso PASSED                                                                                                                                                          [ 30%]
-tests/test_api.py::test_predict_sin_mag_type_usa_valor_por_defecto PASSED                                                                                                                               [ 40%]
-tests/test_api.py::test_predict_batch_mantiene_orden PASSED                                                                                                                                             [ 50%]
-tests/test_api.py::test_campo_faltante_da_422 PASSED                                                                                                                                                    [ 60%]
-tests/test_api.py::test_tipo_incorrecto_da_422 PASSED                                                                                                                                                   [ 70%]
-tests/test_api.py::test_fuera_de_rango_da_422 PASSED                                                                                                                                                    [ 80%]
-tests/test_api.py::test_lote_vacio_da_422 PASSED                                                                                                                                                        [ 90%]
-tests/test_api.py::test_sin_modelo_responde_503 PASSED                                                                                                                                                  [100%]
+tests/test_api.py::test_health_ok PASSED                                 [ 10%]
+tests/test_api.py::test_model_info PASSED                                [ 20%]
+tests/test_api.py::test_predict_exitoso PASSED                           [ 30%]
+tests/test_api.py::test_predict_sin_mag_type_usa_valor_por_defecto PASSED [ 40%]
+tests/test_api.py::test_predict_batch_mantiene_orden PASSED              [ 50%]
+tests/test_api.py::test_campo_faltante_da_422 PASSED                     [ 60%]
+tests/test_api.py::test_tipo_incorrecto_da_422 PASSED                    [ 70%]
+tests/test_api.py::test_fuera_de_rango_da_422 PASSED                     [ 80%]
+tests/test_api.py::test_lote_vacio_da_422 PASSED                         [ 90%]
+tests/test_api.py::test_sin_modelo_responde_503 PASSED                   [100%]
 
-============================================================================================= 10 passed in 6.37s =============================================================================================
-```
+============================= 10 passed in 8.70s ==============================
+
 
 > En nuestra ejecución: **10 passed**.
 
