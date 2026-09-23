@@ -1,0 +1,22 @@
+# Entornos virtuales
+.venv/
+venv/
+mlops/
+env/
+
+# Cachés de Python y pytest
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Datos crudos (se descargan con train.py; ver data/README.md)
+data/*.csv
+
+# Credenciales y configuración local (NUNCA subir)
+.env
+*.key
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+.vscode/

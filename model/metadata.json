@@ -1,0 +1,87 @@
+{
+  "model_version": "1.0.0",
+  "trained_at": "2026-09-22T23:03:23+00:00",
+  "estimator": "RandomForestClassifier",
+  "python_version": "3.14.2",
+  "sklearn": "1.9.1",
+  "pandas": "3.0.6",
+  "features": [
+    "magnitude",
+    "depth",
+    "lat",
+    "lon",
+    "mag_type"
+  ],
+  "numeric_features": [
+    "magnitude",
+    "depth",
+    "lat",
+    "lon"
+  ],
+  "categorical_features": [
+    "mag_type"
+  ],
+  "mag_type_categories_seen": [
+    "mb",
+    "ml",
+    "mw",
+    "mwb",
+    "mwc",
+    "mwr",
+    "mww"
+  ],
+  "target": {
+    "name": "tsunami",
+    "descripcion": "Flag 'tsunami' de USGS: 1 = evento grande en región oceánica con información del sistema de alerta de tsunamis de NOAA.",
+    "clases": {
+      "0": "SIN ALERTA",
+      "1": "ALERTA"
+    }
+  },
+  "dataset": {
+    "fuente": "USGS Earthquake Catalog (ComCat), API FDSN Event",
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query",
+    "parametros": {
+      "format": "geojson",
+      "starttime": "2010-01-01",
+      "endtime": "2026-01-01",
+      "minlatitude": -56,
+      "maxlatitude": -17,
+      "minlongitude": -80,
+      "maxlongitude": -66,
+      "minmagnitude": 5.0,
+      "orderby": "time-asc",
+      "limit": 20000
+    },
+    "n_filas": 1584,
+    "n_positivos": 22,
+    "tasa_positivos": 0.0139
+  },
+  "split": {
+    "test_size": 0.2,
+    "stratify": true,
+    "random_state": 42
+  },
+  "metric": "f1_alerta",
+  "value": 0.5333,
+  "metrics_cv": {
+    "cv_f1_alerta_media": 0.6214,
+    "cv_f1_alerta_std": 0.1486,
+    "cv_pr_auc_media": 0.515,
+    "cv_recall_alerta_media": 0.9467
+  },
+  "metrics_test": {
+    "precision_alerta": 0.3636,
+    "recall_alerta": 1.0,
+    "f1_alerta": 0.5333,
+    "f1_macro": 0.761,
+    "roc_auc": 1.0,
+    "pr_auc": 1.0
+  },
+  "baseline_regla_simple_test": {
+    "precision_alerta": 0.2857,
+    "recall_alerta": 0.5,
+    "f1_alerta": 0.3636,
+    "f1_macro": 0.6762
+  }
+}

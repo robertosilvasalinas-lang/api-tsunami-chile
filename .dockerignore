@@ -1,0 +1,10 @@
+.venv/
+venv/
+mlops/
+__pycache__/
+.pytest_cache/
+.git/
+data/
+docs/
+tests/
+*.md
