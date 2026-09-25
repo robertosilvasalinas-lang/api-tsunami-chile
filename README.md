@@ -3,7 +3,7 @@
 Servicio web (FastAPI) que recibe los datos de un sismo y predice si corresponde a un evento con
 **alerta de tsunami (1)** o **sin alerta (0)**, junto con su probabilidad.
 
-> 🔗 **URL pública:** _(completar solo si se hace el despliegue opcional)_
+**URL pública:** https://api-tsunami-chile.onrender.com
 > ⚠️ Proyecto académico. No reemplaza la información oficial del SHOA ni de SENAPRED.
 
 **Curso:** Cloud Computing — Diploma en Data Science, UAI · **Equipo:** _Héctor Cifuentes, Pablo Parra, Matías Sagarra y Roberto Silva_
@@ -316,7 +316,134 @@ tests/test_api.py::test_sin_modelo_responde_503 PASSED                   [100%]
   deja fuera eventos históricos relevantes como el terremoto de Maule (2010, magnitud 8,8).
 - El modelo no considera la distancia real a la fosa ni el mecanismo focal del sismo.
 
-## 9. Despliegue en la nube (opcional)
+## 9. Despliegue en la nube
 
-_Completar si se realiza: proveedor, pasos, variables de entorno, problema encontrado y su solución,
-y un `curl` contra la URL pública con su respuesta._
+**URL pública:** https://api-tsunami-chile.onrender.com
+
+| | |
+|---|---|
+| Estado del servicio | https://api-tsunami-chile.onrender.com/health |
+| Documentación interactiva | https://api-tsunami-chile.onrender.com/docs |
+| Proveedor | Render — Web Service, plan Free |
+| Runtime | Docker |
+
+### Configuración
+
+| Campo | Valor |
+|---|---|
+| Language | Docker |
+| Dockerfile Path | `./Dockerfile` |
+| Branch | `main` |
+| Instance Type | Free |
+| Health Check Path | `/health` |
+| Auto-Deploy | AJUSTAR: On / no disponible por esta vía |
+
+### Variables de entorno
+
+Ninguna propia del proyecto. Render inyecta `PORT` automáticamente y el `CMD`
+del Dockerfile lo lee con `--port ${PORT}`; en el despliegue real asignó el
+puerto 10000. El servicio no usa credenciales ni consulta APIs externas en
+tiempo de ejecución: el modelo entrenado viaja dentro de la imagen.
+
+### Problemas encontrados y sus soluciones
+
+**1. Elección del runtime: Docker en vez de Python.**
+El proyecto requiere Python 3.14.2, la versión con la que se entrenó el modelo
+y la que declara `runtime.txt`. El runtime nativo de Python de Render no
+permite elegir la versión desde la interfaz —solo ofrece «Python 3»— y la
+deduce al construir, quedando sujeta a lo que la plataforma tenga disponible.
+Desplegar por esa vía arriesgaba cargar el `.pkl` con un intérprete y un
+scikit-learn distintos de los que lo generaron, que es exactamente el fallo
+que el enunciado penaliza.
+
+*Solución:* se desplegó con el runtime **Docker**, usando el `Dockerfile` del
+repositorio, que parte de la imagen `python:3.14.2-slim`. La versión del
+intérprete viaja dentro de la imagen y deja de depender de la plataforma.
+Efecto secundario a tener presente: en modo Docker el `Procfile` queda sin
+usar, porque el comando de arranque lo define el `CMD` del Dockerfile. Ambos
+declaran lo mismo, así que no hay conflicto.
+
+**2. El primer despliegue falló en 7 segundos.**
+El log mostró:
+
+```
+==> Cloning from https://github.com/pabloparrastuardo-bot/api-siniestros-chile
+error: failed to solve: failed to read dockerfile:
+       open Dockerfile: no such file or directory
+```
+
+*Solución:* la primera línea del log delató la causa: el servicio estaba
+clonando otro repositorio, que no tiene Dockerfile. Se había seleccionado el
+repo equivocado en la lista. Como Render no permite cambiar el repositorio de
+un servicio ya creado, se eliminó el servicio y se creó uno nuevo. Lección
+práctica: en un despliegue fallido, la primera línea del log suele decir más
+que el mensaje de error final.
+
+**3. Render no podía acceder al repositorio del equipo.**
+Render se integra con GitHub mediante una *GitHub App*, y una GitHub App se
+instala en una **cuenta**. El repositorio pertenece a la cuenta personal de un
+integrante del equipo: ser colaborador permite escribir en él, pero no
+instalar aplicaciones en la cuenta ajena. Por eso el repositorio no aparecía
+en la lista de Render y la opción de conceder acceso no existía —el selector
+de cuentas solo mostraba la cuenta propia.
+
+*Solución:* se usó la pestaña **Public Git Repository** de Render, que clona
+un repositorio público directamente por URL, sin pasar por los permisos de la
+GitHub App. Es viable porque el repositorio es público.
+
+### Evidencia
+
+Llamada real contra la URL pública, ejecutada desde Swagger en producción:
+
+```bash
+curl -X POST 'https://api-tsunami-chile.onrender.com/predict' \
+  -H 'Content-Type: application/json' \
+  -d '{"magnitude": 7.8, "depth": 20, "lat": -22.5, "lon": -70.9, "mag_type": "mww"}'
+```
+
+Respuesta (HTTP 200):
+
+```json
+{
+  "prediccion": 1,
+  "etiqueta": "ALERTA DE TSUNAMI",
+  "probabilidad_alerta": 0.9539,
+  "confianza": 0.9539,
+  "confianza_pct": "95.39%",
+  "model_version": "1.0.0",
+  "timestamp": "2026-09-25T13:28:45+00:00"
+}
+```
+
+Es la **misma probabilidad** que devuelve la ejecución local documentada en
+`docs/evidencia_llamadas.md`. Que coincidan confirma que el artefacto
+serializado se comporta igual en ambos entornos, que es justamente el objetivo
+de haber guardado el pipeline completo en el `.pkl`.
+
+Captura del servicio público en `docs/evidencia_render.png`.
+
+Log del arranque en Render:
+
+```
+==> Deploying...
+INFO:     Started server process [7]
+INFO:     Waiting for application startup.
+2026-09-25 13:25:58,006 INFO Modelo cargado desde /app/model/model.pkl
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:10000
+==> Your service is live
+```
+
+La línea `Modelo cargado desde /app/model/model.pkl` aparece **una sola vez**,
+durante el arranque: es la confirmación en producción de que el `lifespan`
+carga el modelo al iniciar el proceso y no en cada petición.
+
+### Nota sobre el arranque en frío
+
+El plan gratuito de Render suspende la instancia tras 15 minutos sin tráfico.
+La primera petición después de una pausa puede tardar cerca de un minuto
+mientras el contenedor vuelve a levantar; las siguientes responden en
+milisegundos. Es el costo esperado de un servicio sin instancias mínimas
+reservadas, y el motivo por el que conviene visitar `/health` antes de
+cualquier demostración.
+
