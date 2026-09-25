@@ -178,6 +178,92 @@ Fallo del modelo → **500** con mensaje genérico (sin trazas internas). Modelo
 **Evidencia:** captura de `/docs` en `docs/evidencia_docs.png` y transcripción de llamadas en
 [`docs/evidencia_llamadas.md`](docs/evidencia_llamadas.md).
 
+### Cómo interpretar una predicción
+
+Las métricas de la sección 2 dicen qué tan bueno es el modelo en conjunto. Esta
+sección responde otra pregunta: **qué hacer con una respuesta concreta**.
+
+Una llamada a `/predict` devuelve seis campos:
+
+```json
+{
+  "prediccion": 1,
+  "etiqueta": "ALERTA DE TSUNAMI",
+  "probabilidad_alerta": 0.9539,
+  "confianza": 0.9539,
+  "confianza_pct": "95.39%",
+  "model_version": "1.0.0",
+  "timestamp": "2026-09-22T21:25:00+00:00"
+}
+```
+
+| Campo | Qué significa |
+|---|---|
+| `prediccion` | La clase elegida: `1` con alerta, `0` sin alerta. |
+| `etiqueta` | La misma clase en palabras, para no tener que recordar el código. |
+| `probabilidad_alerta` | **Siempre** la probabilidad de la clase 1. Es el número a mirar si quieres comparar sismos entre sí. |
+| `confianza` | La probabilidad de la clase **que el modelo eligió**. |
+| `model_version` | Qué versión del modelo respondió. Sirve para rastrear una predicción si mañana se reentrena. |
+| `timestamp` | Momento UTC de la respuesta. |
+
+**`probabilidad_alerta` y `confianza` no son lo mismo**, aunque coincidan en el
+ejemplo de arriba. Coinciden solo cuando la predicción es 1. Cuando el modelo
+responde "sin alerta", `confianza` pasa a ser la probabilidad de la clase 0:
+
+| Sismo | `probabilidad_alerta` | `prediccion` | `confianza` |
+|---|---|---|---|
+| Magnitud 7,8 · 20 km · costa de Antofagasta | 0,954 | 1 | 0,954 |
+| Magnitud 4,6 · 110 km · cordillera | 0,020 | 0 | 0,980 |
+
+En el segundo caso, un 98 % de confianza **no** es un 98 % de probabilidad de
+tsunami: es lo contrario. Leer `confianza` sin mirar `prediccion` es el error
+más fácil de cometer con esta API.
+
+**El umbral es 0,5 y es una decisión, no una ley.** El modelo responde `1`
+cuando `probabilidad_alerta ≥ 0,5`. Como la API entrega siempre la probabilidad
+cruda, quien consuma el servicio puede aplicar su propio corte sin reentrenar
+nada: exigir 0,8 para reducir falsas alarmas, o bajar a 0,3 si prefiere
+sobre-avisar.
+
+#### Las dos respuestas no pesan lo mismo
+
+Este es el punto que conviene tener claro antes de usar el servicio para algo.
+Con recall de 0,947 en validación cruzada y precisión de 0,364 en prueba:
+
+- **Un `SIN ALERTA` es una respuesta fuerte.** El modelo casi no deja pasar
+  eventos con alerta, así que cuando dice que no, lo más probable es que no.
+- **Una `ALERTA` es una respuesta débil.** De las 11 alertas que emitió en el
+  conjunto de prueba, solo 4 eran correctas. Aproximadamente dos de cada tres
+  son falsas alarmas.
+
+Esa asimetría es deliberada: `class_weight="balanced"` hace que no detectar un
+evento real salga mucho más caro que revisar una alarma de más. Para un sistema
+de alerta temprana es el intercambio correcto, pero significa que **una alerta
+del modelo es una señal para verificar, no una conclusión**.
+
+#### Lo que la predicción no dice
+
+- No dice que vaya a ocurrir un tsunami. El objetivo aprendido es el flag
+  `tsunami` de USGS, que marca eventos con información del sistema de alerta de
+  NOAA — condiciones para emitir información, no un tsunami confirmado.
+- No estima altura de ola, hora de llegada ni zona afectada.
+- No reemplaza al SHOA ni a SENAPRED. Este es un ejercicio académico.
+
+#### Cuándo desconfiar de una respuesta
+
+El modelo vio 1.584 sismos chilenos de magnitud ≥ 5,0 entre 2010 y 2025. Fuera
+de ese marco extrapola sin avisar:
+
+- Coordenadas fuera de Chile. La validación acepta latitud −60 a −15 y longitud
+  −82 a −64, pero dentro de ese rectángulo hay zonas con muy pocos datos.
+- Magnitudes bajo 5,0, que quedaron excluidas del entrenamiento a propósito.
+- Un `mag_type` que no esté entre los siete observados (`mb`, `ml`, `mw`,
+  `mwb`, `mwc`, `mwr`, `mww`). El `OneHotEncoder` lo tolera sin caerse, pero la
+  predicción se apoya solo en las variables numéricas.
+
+Para ver qué variables y qué categorías conoce el modelo que está respondiendo,
+consulta `GET /model-info`.
+
 ## 6. Pruebas automatizadas
 
 ```powershell
