@@ -1,6 +1,6 @@
 # Evidencia de llamadas a la API
 
-Servidor: `https://api-tsunami-chile.onrender.com` — generado el 2026-09-26 09:47
+Servidor: `https://api-tsunami-chile.onrender.com` — generado el 2026-09-26 09:52
 
 ## Estado del servicio
 
@@ -101,7 +101,7 @@ Respuesta:
   "confianza": 0.9539,
   "confianza_pct": "95.39%",
   "model_version": "1.0.0",
-  "timestamp": "2026-09-26T12:47:43+00:00"
+  "timestamp": "2026-09-26T12:52:20+00:00"
 }
 ```
 
@@ -152,7 +152,7 @@ Respuesta:
     }
   ],
   "model_version": "1.0.0",
-  "timestamp": "2026-09-26T12:47:45+00:00"
+  "timestamp": "2026-09-26T12:52:21+00:00"
 }
 ```
 
