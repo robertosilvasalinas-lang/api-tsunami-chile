@@ -21,10 +21,25 @@ def client():
 
 
 # ---------------------------- Servicio ----------------------------
+def test_raiz_muestra_menu_html(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    for ruta in ("/docs", "/health", "/model-info"):
+        assert ruta in r.text
+
+
 def test_health_ok(client):
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json()["model_loaded"] is True
+
+
+def test_health_html_para_navegador(client):
+    r = client.get("/health", headers={"accept": "text/html"})
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "ok" in r.text.lower()
 
 
 def test_model_info(client):
@@ -33,6 +48,13 @@ def test_model_info(client):
     body = r.json()
     assert body["features"] == ["magnitude", "depth", "lat", "lon", "mag_type"]
     assert body["estimator"] == "RandomForestClassifier"
+
+
+def test_model_info_html_para_navegador(client):
+    r = client.get("/model-info", headers={"accept": "text/html"})
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "RandomForestClassifier" in r.text
 
 
 # ---------------------------- Predicción ----------------------------
@@ -93,3 +115,26 @@ def test_sin_modelo_responde_503(client):
         assert client.get("/health").status_code == 503
     finally:
         ARTIFACTS["model"] = modelo
+
+
+def test_fallo_del_modelo_responde_500(client):
+    """Si el pipeline falla al predecir (no al cargar), la API debe responder 500
+    con un mensaje controlado, sin exponer la traza interna."""
+    modelo_real = ARTIFACTS["model"]
+
+    class ModeloRoto:
+        classes_ = modelo_real.classes_
+
+        def predict(self, df):
+            raise RuntimeError("fallo simulado del modelo")
+
+        def predict_proba(self, df):
+            raise RuntimeError("fallo simulado del modelo")
+
+    ARTIFACTS["model"] = ModeloRoto()
+    try:
+        r = client.post("/predict", json=SISMO_VALIDO)
+        assert r.status_code == 500
+        assert "fallo simulado" not in r.json()["detail"]
+    finally:
+        ARTIFACTS["model"] = modelo_real
