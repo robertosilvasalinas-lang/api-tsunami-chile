@@ -1,6 +1,6 @@
 # Evidencia de llamadas a la API
 
-Servidor: `http://localhost:8000` — generado el 2026-09-22 21:25
+Servidor: `https://api-tsunami-chile.onrender.com` — generado el 2026-09-26 09:47
 
 ## Estado del servicio
 
@@ -101,7 +101,7 @@ Respuesta:
   "confianza": 0.9539,
   "confianza_pct": "95.39%",
   "model_version": "1.0.0",
-  "timestamp": "2026-09-23T00:25:46+00:00"
+  "timestamp": "2026-09-26T12:47:43+00:00"
 }
 ```
 
@@ -152,7 +152,7 @@ Respuesta:
     }
   ],
   "model_version": "1.0.0",
-  "timestamp": "2026-09-23T00:25:48+00:00"
+  "timestamp": "2026-09-26T12:47:45+00:00"
 }
 ```
 

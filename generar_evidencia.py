@@ -29,10 +29,25 @@ LLAMADAS = [
      {"magnitude": 12.5, "depth": 20.0, "lat": -30.0}),
 ]
 
+# Las instancias gratuitas se duermen: el primer arranque puede tardar más de un minuto.
+print(f"Despertando el servicio en {BASE} (puede tardar hasta 2 minutos)...")
+for intento in range(1, 4):
+    try:
+        requests.get(BASE + "/health", timeout=120)
+        print("Servicio despierto.\n")
+        break
+    except requests.RequestException as exc:
+        print(f"  intento {intento}/3 sin respuesta ({type(exc).__name__}); reintentando...")
+else:
+    raise SystemExit(
+        f"El servicio en {BASE} no respondió. Revisa en Render que el estado sea 'Live' "
+        "y mira los logs del servicio."
+    )
+
 lineas = [f"# Evidencia de llamadas a la API\n\nServidor: `{BASE}` — generado el {datetime.now():%Y-%m-%d %H:%M}\n"]
 for titulo, metodo, ruta, cuerpo in LLAMADAS:
     try:
-        r = requests.request(metodo, BASE + ruta, json=cuerpo, timeout=30)
+        r = requests.request(metodo, BASE + ruta, json=cuerpo, timeout=120)
     except requests.ConnectionError:
         raise SystemExit(f"No hay respuesta en {BASE}. ¿Está encendida la API (uvicorn)?")
     print(f"{r.status_code}  {metodo} {ruta}")
