@@ -8,6 +8,7 @@ env/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.coverage
 
 # Datos crudos (se descargan con train.py; ver data/README.md)
 data/*.csv

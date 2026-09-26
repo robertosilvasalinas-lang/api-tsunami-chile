@@ -22,7 +22,7 @@ import pandas as pd
 import sklearn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.schemas import (
     InfoModelo,
@@ -134,6 +134,169 @@ def ahora() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _prefiere_html(request: Request) -> bool:
+    """El navegador pide 'text/html' explícitamente; curl, pytest y Swagger no."""
+    return "text/html" in request.headers.get("accept", "")
+
+
+# Tema oscuro propio (no depende de ningún host externo): superficies, texto y
+# acentos de estado, con la misma pareja fondo-oscuro/texto-claro para cada rol
+# (éxito, error, advertencia) para que el contraste sea consistente en toda la app.
+_ESTILO = """
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 48px 20px 72px;
+      background: #0b0d10; color: #e8eaed;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    .nav { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 32px; }
+    .brand { display: flex; align-items: center; gap: 8px; font-weight: 500; font-size: 15px; color: #e8eaed; text-decoration: none; }
+    .nav-links { display: flex; gap: 18px; }
+    .nav-links a { color: #5dcaa5; text-decoration: none; font-size: 14px; }
+    .nav-links a:hover { text-decoration: underline; }
+    h1 { font-size: 24px; font-weight: 500; margin: 0 0 8px; }
+    h2 { font-size: 16px; font-weight: 500; margin: 32px 0 12px; color: #c7cbd1; }
+    p.lead { color: #9aa1ab; margin: 0 0 24px; font-size: 15px; max-width: 60ch; }
+    .card { background: #14171b; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 4px 22px; margin-bottom: 22px; }
+    table { width: 100%; border-collapse: collapse; }
+    tr { border-bottom: 1px solid rgba(255,255,255,0.06); }
+    tr:last-child { border-bottom: none; }
+    th, td { text-align: left; padding: 13px 0; font-size: 14px; font-weight: 400; vertical-align: top; }
+    th { width: 42%; color: #9aa1ab; padding-right: 12px; }
+    td { color: #e8eaed; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px; border-radius: 999px; font-size: 13px; font-weight: 500; }
+    .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+    .badge-ok { background: #04342c; color: #9fe1cb; }
+    .badge-bad { background: #501313; color: #f7c1c1; }
+    .badge-warn { background: #412402; color: #fac775; }
+    .btn { display: inline-block; margin-top: 4px; padding: 10px 20px; border-radius: 10px; background: #1d9e75; color: #04342c; font-weight: 500; font-size: 14px; text-decoration: none; }
+    .btn:hover { background: #5dcaa5; }
+    .footer { color: #6b7280; font-size: 13px; margin-top: 28px; }
+    .info { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-left: 6px; border-radius: 50%; background: rgba(255,255,255,0.1); color: #9aa1ab; font-size: 11px; font-style: normal; line-height: 1; cursor: help; vertical-align: middle; }
+    .info .tooltip { visibility: hidden; opacity: 0; position: absolute; left: 0; top: 130%; background: #1f242b; color: #e8eaed; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 9px 11px; font-size: 12px; font-weight: 400; line-height: 1.45; width: 240px; z-index: 10; transition: opacity .15s; }
+    .info:hover .tooltip, .info:focus .tooltip { visibility: visible; opacity: 1; }
+"""
+
+_NAV = """
+    <nav class="nav">
+      <a class="brand" href="/">🌊 API tsunami Chile</a>
+      <div class="nav-links">
+        <a href="/docs">docs</a>
+        <a href="/health">health</a>
+        <a href="/model-info">model-info</a>
+      </div>
+    </nav>
+"""
+
+
+def _pagina(titulo: str, cuerpo: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{titulo} — API de Alerta de Tsunami</title>
+  <style>{_ESTILO}</style>
+</head>
+<body>
+  <div class="wrap">
+    {_NAV}
+    {cuerpo}
+    <p class="footer">Proyecto académico. No reemplaza la información oficial del SHOA ni de SENAPRED.</p>
+  </div>
+</body>
+</html>"""
+
+
+def _badge(texto: str, tipo: str) -> str:
+    clase = {"ok": "badge-ok", "bad": "badge-bad", "warn": "badge-warn"}[tipo]
+    return f'<span class="badge {clase}">{texto}</span>'
+
+
+# Traducción de llaves crudas de metadata.json (snake_case) a etiquetas legibles.
+# Las llaves que no están aquí (p. ej. las que ya vienen armadas a mano, como
+# "Versión del modelo") se muestran sin tocar: solo se reformatean identificadores
+# en snake_case puro (ver _etiqueta).
+_ETIQUETAS = {
+    "fuente": "Fuente",
+    "url": "URL",
+    "n_filas": "Filas en el dataset",
+    "n_positivos": "Casos con alerta",
+    "tasa_positivos": "Tasa de positivos",
+    "precision_alerta": "Precisión (alerta)",
+    "recall_alerta": "Recall (alerta)",
+    "f1_alerta": "F1 (alerta)",
+    "f1_macro": "F1 macro",
+    "roc_auc": "ROC-AUC",
+    "pr_auc": "PR-AUC",
+    "cv_f1_alerta_media": "F1 alerta — media (CV)",
+    "cv_f1_alerta_std": "F1 alerta — desv. estándar (CV)",
+    "cv_pr_auc_media": "PR-AUC — media (CV)",
+    "cv_recall_alerta_media": "Recall alerta — media (CV)",
+}
+
+
+def _etiqueta(clave: str) -> str:
+    if clave in _ETIQUETAS:
+        return _ETIQUETAS[clave]
+    if "_" in clave and clave == clave.lower():
+        texto = clave.replace("_", " ")
+        return texto[0].upper() + texto[1:]
+    return clave
+
+
+# Definiciones cortas para el ícono ⓘ, indexadas por la etiqueta ya traducida
+# (no por la llave cruda): así cubren tanto las tablas armadas desde metadata.json
+# como las armadas a mano (p. ej. "scikit-learn (servidor)").
+_GLOSARIO = {
+    "Precisión (alerta)": "De las alertas que emitió el modelo, qué porcentaje eran correctas.",
+    "Recall (alerta)": "De los sismos que sí tenían alerta, qué porcentaje detectó el modelo.",
+    "F1 (alerta)": "Promedio armónico entre precisión y recall de la clase alerta.",
+    "F1 macro": "Promedio de F1 entre ambas clases (alerta y sin alerta), sin ponderar por frecuencia.",
+    "ROC-AUC": "Capacidad de separar ambas clases sin depender de un umbral. 1.0 = perfecto, 0.5 = azar.",
+    "PR-AUC": "Como ROC-AUC, pero centrado en la clase minoritaria (alerta); más útil con clases desbalanceadas.",
+    "F1 alerta — media (CV)": "F1 de alerta promediado sobre 25 particiones de validación cruzada (5 folds × 5 repeticiones).",
+    "F1 alerta — desv. estándar (CV)": "Qué tanto varía el F1 entre particiones de validación cruzada. Alto = resultados inestables.",
+    "PR-AUC — media (CV)": "PR-AUC promediado sobre la validación cruzada.",
+    "Recall alerta — media (CV)": "Recall de alerta promediado sobre la validación cruzada.",
+    "Filas en el dataset": "Cantidad total de sismos usados para entrenar y evaluar el modelo.",
+    "Casos con alerta": "Cuántos de esos sismos tenían el flag de alerta de tsunami de USGS.",
+    "Tasa de positivos": "Porcentaje de sismos con alerta sobre el total del dataset.",
+    "scikit-learn (servidor)": (
+        "La versión de scikit-learn cargada en este servidor debe coincidir con la que "
+        "entrenó el modelo, o la predicción puede fallar o dar resultados distintos."
+    ),
+}
+
+
+def _tabla(filas: dict) -> str:
+    """Renderiza un dict plano como tabla HTML de dos columnas (clave / valor),
+    con un ícono ⓘ junto a las etiquetas que tienen definición en _GLOSARIO."""
+
+    def _valor(v: Any) -> str:
+        if isinstance(v, (list, tuple)):
+            return ", ".join(str(x) for x in v) or "—"
+        if isinstance(v, dict):
+            return ", ".join(f"{k}={x}" for k, x in v.items()) or "—"
+        return "—" if v in (None, "") else str(v)
+
+    def _fila(k: str, v: Any) -> str:
+        etiqueta = _etiqueta(k)
+        definicion = _GLOSARIO.get(etiqueta)
+        icono = (
+            f'<span class="info" tabindex="0" aria-label="{definicion}">ⓘ'
+            f'<span class="tooltip">{definicion}</span></span>'
+            if definicion else ""
+        )
+        return f"<tr><th>{etiqueta}{icono}</th><td>{_valor(v)}</td></tr>"
+
+    filas_html = "\n".join(_fila(k, v) for k, v in filas.items())
+    return f'<div class="card"><table>{filas_html}</table></div>'
+
+
 def predecir(sismos: list[Sismo]) -> list[Prediccion]:
     """Convierte los sismos a DataFrame, ejecuta el pipeline y arma las respuestas."""
     modelo = obtener_modelo()
@@ -168,13 +331,18 @@ def predecir(sismos: list[Sismo]) -> list[Prediccion]:
 # --------------------------------------------------------------------------
 # Endpoints
 # --------------------------------------------------------------------------
-@app.get("/", tags=["General"], summary="Bienvenida")
-def raiz() -> dict:
-    return {
-        "mensaje": "API de Alerta de Tsunami — Chile. Visita /docs para probarla.",
-        "model_loaded": "model" in ARTIFACTS,
-        "endpoints": ["/health", "/model-info", "/predict", "/predict-batch", "/docs"],
-    }
+@app.get("/", tags=["General"], summary="Bienvenida", response_class=HTMLResponse)
+def raiz() -> HTMLResponse:
+    cargado = "model" in ARTIFACTS
+    estado = _badge("modelo cargado", "ok") if cargado else _badge("modelo no disponible", "bad")
+    cuerpo = f"""
+  <h1>API de alerta de tsunami — Chile</h1>
+  <p class="lead">Servicio de inferencia que clasifica sismos en Chile como <strong>con alerta de tsunami</strong>
+  o <strong>sin alerta</strong>, junto con su probabilidad. Entrenado con el catálogo público de USGS.</p>
+  <p>{estado}</p>
+  <p><a class="btn" href="/docs">Probar la API en /docs</a></p>
+"""
+    return HTMLResponse(content=_pagina("Inicio", cuerpo))
 
 
 @app.get(
@@ -184,20 +352,33 @@ def raiz() -> dict:
     response_model=Salud,
     responses={503: {"description": "El servicio está arriba pero el modelo no se cargó."}},
 )
-def health():
+def health(request: Request):
     cargado = "model" in ARTIFACTS
     cuerpo = Salud(status="ok" if cargado else "degradado", model_loaded=cargado,
                    model_version=version_modelo() if cargado else None)
+
+    if _prefiere_html(request):
+        badge = _badge("ok", "ok") if cargado else _badge("degradado", "bad")
+        html_cuerpo = f"""
+  <h1>Estado del servicio</h1>
+  {_tabla({
+        "Estado": badge,
+        "Modelo cargado": "Sí" if cargado else "No",
+        "Versión del modelo": cuerpo.model_version,
+    })}
+"""
+        return HTMLResponse(content=_pagina("Estado", html_cuerpo), status_code=200 if cargado else 503)
+
     if not cargado:
         return JSONResponse(status_code=503, content=cuerpo.model_dump())
     return cuerpo
 
 
 @app.get("/model-info", tags=["Modelo"], summary="Metadatos del modelo", response_model=InfoModelo)
-def model_info() -> InfoModelo:
+def model_info(request: Request):
     modelo = obtener_modelo()
     meta = ARTIFACTS.get("metadata", {})
-    return InfoModelo(
+    info = InfoModelo(
         model_version=version_modelo(),
         estimator=type(modelo.steps[-1][1]).__name__ if hasattr(modelo, "steps") else type(modelo).__name__,
         pipeline_steps=[nombre for nombre, _ in getattr(modelo, "steps", [])],
@@ -210,6 +391,37 @@ def model_info() -> InfoModelo:
         metrics_cv=meta.get("metrics_cv", {}),
         dataset=meta.get("dataset", {}),
     )
+
+    if _prefiere_html(request):
+        coinciden = info.sklearn_version_entrenamiento == info.sklearn_version_servidor
+        version_sklearn = (
+            f"{info.sklearn_version_servidor} {_badge('coincide con entrenamiento', 'ok')}"
+            if coinciden
+            else f"{info.sklearn_version_servidor} {_badge(f'entrenado con {info.sklearn_version_entrenamiento}', 'warn')}"
+        )
+        general = _tabla({
+            "Versión del modelo": info.model_version,
+            "Estimador": info.estimator,
+            "Pasos del pipeline": info.pipeline_steps,
+            "Variables de entrada": info.features,
+            "Variables categóricas": info.categorical_features,
+            "scikit-learn (servidor)": version_sklearn,
+            "Entrenado el": info.trained_at,
+        })
+        dataset_sin_parametros = {k: v for k, v in info.dataset.items() if k != "parametros"}
+        cuerpo = f"""
+  <h1>Metadatos del modelo</h1>
+  {general}
+  <h2>Métricas — conjunto de prueba</h2>
+  {_tabla(info.metrics_test)}
+  <h2>Métricas — validación cruzada</h2>
+  {_tabla(info.metrics_cv)}
+  <h2>Dataset de entrenamiento</h2>
+  {_tabla(dataset_sin_parametros)}
+"""
+        return HTMLResponse(content=_pagina("Modelo", cuerpo))
+
+    return info
 
 
 @app.post("/predict", tags=["Predicción"], summary="Predice UN sismo", response_model=RespuestaPrediccion)
